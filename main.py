@@ -176,11 +176,15 @@ def open_audio():
         return (C1, encrypted_audio_data)
 
     def desencriptar_audio(C1, C2, p, a, output_file):
-        s = pow(C1, a, p)
+        C1_int = int.from_bytes(C1, byteorder='big')  # Convert C1 from bytes to an integer
+        s = pow(C1_int, a, p)
+
         decrypted_audio_data = bytes((byte * mod_inverse(s, p) % p for byte in C2))
 
         with open(output_file, 'wb') as file:
             file.write(decrypted_audio_data)
+
+        etiqueta_resultado.config(text=f"Audio decrypted and saved in '{output_file}'")
 
     def click_encriptar_audio():
         archivo_entrada = filedialog.askopenfilename(title="Select Input Audio File")
@@ -191,7 +195,7 @@ def open_audio():
         C1, C2 = encriptar_audio(archivo_entrada, p, g, A)
 
         with open(archivo_salida, 'wb') as file:
-            file.write(C1)
+            file.write(C1.to_bytes((C1.bit_length() + 7) // 8, byteorder='big'))  # Convert C1 to bytes
             file.write(C2)
 
         etiqueta_resultado.config(text=f"Audio encrypted and saved in '{archivo_salida}'")
@@ -221,14 +225,87 @@ def open_imagen():
     ventana.geometry("400x300")
 
     # Image encryption interface
+    # Function to handle encryption of an image with static keys
+    def encrypt_image_static():
+        image_file_path = filedialog.askopenfilename()
+        if not image_file_path:
+            return
+
+        try:
+            img = Image.open(image_file_path)
+            img = img.convert("RGB")
+            width, height = img.size
+
+            encrypted_pixels = []
+            for i in range(width):
+                for j in range(height):
+                    r, g, b = img.getpixel((i, j))
+                    r_c1, r_c2 = elgamal_encrypt(r)
+                    g_c1, g_c2 = elgamal_encrypt(g)
+                    b_c1, b_c2 = elgamal_encrypt(b)
+                    encrypted_pixels.append((r_c1, r_c2, g_c1, g_c2, b_c1, b_c2))
+
+            encrypted_image = Image.new("RGB", (width, height))
+            pixel_index = 0
+            for i in range(width):
+                for j in range(height):
+                    r_c1, r_c2, g_c1, g_c2, b_c1, b_c2 = encrypted_pixels[pixel_index]
+                    r_plain = elgamal_decrypt(r_c1, r_c2)
+                    g_plain = elgamal_decrypt(g_c1, g_c2)
+                    b_plain = elgamal_decrypt(b_c1, b_c2)
+                    encrypted_image.putpixel((i, j), (r_plain, g_plain, b_plain))
+                    pixel_index += 1
+
+            encrypted_image.save("encrypted_image.png")
+            info_label.config(text="Image encrypted and saved as encrypted_image.png")
+
+        except Exception as e:
+            info_label.config(text="Error: " + str(e))
+
+    # Function to handle decryption of an image with static keys
+    def decrypt_image_static():
+        image_file_path = filedialog.askopenfilename()
+        if not image_file_path:
+            return
+
+        try:
+            img = Image.open(image_file_path)
+            img = img.convert("RGB")
+            width, height = img.size
+
+            decrypted_pixels = []
+            for i in range(width):
+                for j in range(height):
+                    r, g, b = img.getpixel((i, j))
+                    r_c1, r_c2 = elgamal_encrypt(r)
+                    g_c1, g_c2 = elgamal_encrypt(g)
+                    b_c1, b_c2 = elgamal_encrypt(b)
+                    decrypted_pixels.append((r_c1, r_c2, g_c1, g_c2, b_c1, b_c2))
+
+            decrypted_image = Image.new("RGB", (width, height))
+            pixel_index = 0
+            for i in range(width):
+                for j in range(height):
+                    r_c1, r_c2, g_c1, g_c2, b_c1, b_c2 = decrypted_pixels[pixel_index]
+                    r_plain = elgamal_decrypt(r_c1, r_c2)
+                    g_plain = elgamal_decrypt(g_c1, g_c2)
+                    b_plain = elgamal_decrypt(b_c1, b_c2)
+                    decrypted_image.putpixel((i, j), (r_plain, g_plain, b_plain))
+                    pixel_index += 1
+
+            decrypted_image.save("decrypted_image.png")
+            info_label.config(text="Image decrypted and saved as decrypted_image.png")
+
+        except Exception as e:
+            info_label.config(text="Error: " + str(e))
 
     heading_label = tk.Label(ventana, text="Image Encryption with ElGamal", font=("Arial", 16))
     heading_label.pack(pady=10)
 
-    button_encriptar = tk.Button(ventana, text="Encrypt Image")
+    button_encriptar = tk.Button(ventana, text="Encrypt Image", command= encrypt_image_static)
     button_encriptar.pack(pady=5)
 
-    button_desencriptar = tk.Button(ventana, text="Decrypt Image")
+    button_desencriptar = tk.Button(ventana, text="Decrypt Image", command= decrypt_image_static)
     button_desencriptar.pack(pady=5)
 
     def volver_atras():
@@ -244,81 +321,26 @@ def open_imagen():
     button_desencriptar.configure(fg="#FFFFFF")
     button_atras.configure(fg="#FFFFFF")
 
-    etiqueta_resultado = tk.Label(ventana, text="")
-    etiqueta_resultado.pack(pady=10)
+    # Create info label
+    info_label = tk.Label(ventana, text="")
+    info_label.pack()
 
-    def encriptar_imagen(image_file, p, g, A, k):
-        # Open and load the image
-        img = Image.open(image_file)
-        img_data = list(img.getdata())
+    gI = 2
+    pI = 23
+    xI = 6  # Private key
+    public_keyI = 8  # Public key
 
-        # Encrypt the image data
-        encrypted_data = [(r * pow(A, k, p) % p, g, b) for r, g, b in img_data]
+    # ElGamal encryption and decryption functions
+    def elgamal_encrypt(plain_text):
+        kI = 7  # Static value for k (should be random in practice)
+        c1 = pow(gI, kI, pI)
+        c2 = (plain_text * pow(public_keyI, kI, pI)) % pI
+        return c1, c2
 
-        return encrypted_data
-
-    def desencriptar_imagen(encrypted_data, p, a, output_file):
-        decrypted_data = [(r * mod_inverse(encrypted_data[i][1], p) % p, a, b) for i, (r, _, b) in
-                          enumerate(encrypted_data)]
-
-        # Get image dimensions from the output file
-        with Image.open(output_file) as img:
-            img_width, img_height = img.size
-
-        img = Image.new('RGB', (img_width, img_height))
-        img.putdata(decrypted_data)
-        img.save(output_file)
-
-    def click_encriptar_imagen():
-        archivo_entrada = filedialog.askopenfilename(title="Select Input Image")
-        archivo_salida = filedialog.asksaveasfilename(title="Select Output Image")
-
-        p, g, A, a = generar_claves()
-        k = 5  # Your random value for encryption
-
-        encrypted_data = encriptar_imagen(archivo_entrada, p, g, A, k)
-
-        # Determine the original image format
-        with Image.open(archivo_entrada) as img:
-            original_format = img.format
-
-        # Save the encrypted image with the original format and extension
-        img = Image.new('RGB', (1, 1))
-        img.putdata([(0, 0, 0)])  # Create a dummy image with one pixel
-        img.save(archivo_salida, format=original_format)
-
-        # Save the encrypted data as a binary file
-        with open(archivo_salida, 'ab') as file:
-            pickle.dump(encrypted_data, file)
-
-        etiqueta_resultado.config(text=f"Image encrypted and saved in '{archivo_salida}'")
-
-    def click_desencriptar_imagen():
-        archivo_entrada = filedialog.askopenfilename(title="Select Encrypted Image")
-        archivo_salida = filedialog.asksaveasfilename(title="Select Output Image")
-
-        # Determine the original image format
-        with Image.open(archivo_entrada) as img:
-            original_format = img.format
-
-        # Extract the encrypted data from the image file
-        with open(archivo_entrada, 'rb') as file:
-            # Determine the size of the image data
-            img_size = file.tell()
-
-            # Load the encrypted data from the remainder of the file
-            file.seek(img_size)
-            encrypted_data = pickle.load(file)
-
-        p, g, A, a = generar_claves()
-
-        # Decrypt the image using the extracted encrypted data
-        desencriptar_imagen(encrypted_data, p, a, archivo_salida)
-
-        etiqueta_resultado.config(text=f"Image decrypted and saved in '{archivo_salida}'")
-
-    button_encriptar.config(command=click_encriptar_imagen)
-    button_desencriptar.config(command=click_desencriptar_imagen)
+    def elgamal_decrypt(c1, c2):
+        s = pow(c1, xI, pI)
+        plaintext = (c2 * pow(s, pI - 2, pI)) % pI
+        return plaintext
 
     ventana.mainloop()
 
@@ -330,3 +352,5 @@ def generar_claves():
 
 if __name__ == "__main__":
     open_menu()
+
+
