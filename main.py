@@ -2,7 +2,7 @@ from sympy import mod_inverse
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import PhotoImage
-from PIL import Image
+from PIL import Image, ImageTk
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
 import os
@@ -16,13 +16,18 @@ def open_menu():
     ventana.title("Encriptación ElGamal")
     ventana.geometry("500x500")
 
+    # Load and display the background image
+    background_image = PhotoImage(file="background.png")
+    background_label = tk.Label(ventana, image=background_image)
+    background_label.place(relwidth=1, relheight=1)
+
     # Main menu interface
     heading_label = tk.Label(ventana, text="Encriptación ElGamal", font=("Arial", 20))
     heading_label.pack(pady=10)
-    heading_label.configure(bg="#FFFFFF")
+    heading_label.configure(bg="#1d2528", fg="#FFFFFF")
 
     image = PhotoImage(file="lock.png")
-    image_label = tk.Label(ventana, image=image)
+    image_label = tk.Label(ventana, image=image, bg="#1d2528")
     image_label.pack()
 
     def archivo():
@@ -34,16 +39,28 @@ def open_menu():
     def imagen():
         open_imagen()
 
-    button1 = tk.Button(ventana, text="Encriptar Texto", command=archivo)
-    button2 = tk.Button(ventana, text="Encriptar PDF", command=pdf)
-    button3 = tk.Button(ventana, text="Encriptar Imagen", command=imagen)
 
-    button1.configure(bg="#2aa3f4")
-    button2.configure(bg="#2aa3f4")
-    button3.configure(bg="#2aa3f4")
-    button1.configure(fg="#FFFFFF")
-    button2.configure(fg="#FFFFFF")
-    button3.configure(fg="#FFFFFF")
+    # Load icons and resize them
+    icon_file1 = Image.open("icon1.png")
+    icon_file1 = icon_file1.resize((32, 32))  # Adjust the size as needed
+    icon_file1 = ImageTk.PhotoImage(icon_file1)
+
+    icon_file2 = Image.open("icon2.png")
+    icon_file2 = icon_file2.resize((32, 32))  # Adjust the size as needed
+    icon_file2 = ImageTk.PhotoImage(icon_file2)
+
+    icon_file3 = Image.open("icon3.png")
+    icon_file3 = icon_file3.resize((32, 32))  # Adjust the size as needed
+    icon_file3 = ImageTk.PhotoImage(icon_file3)
+
+    button1 = tk.Button(ventana, text=" Encriptar Texto", command=archivo, compound="left", image=icon_file1, padx=5, pady=5)
+    button2 = tk.Button(ventana, text=" Encriptar PDF", command=pdf, compound="left", image=icon_file2, padx=5, pady=5)
+    button3 = tk.Button(ventana, text=" Encriptar Imagen", command=imagen, compound="left", image=icon_file3, padx=5, pady=5)
+
+    # Configure the button colors
+    button1.configure(bg="#2aa3f4", fg="#FFFFFF")
+    button2.configure(bg="#2aa3f4", fg="#FFFFFF")
+    button3.configure(bg="#2aa3f4", fg="#FFFFFF")
 
     button1.pack(pady=10)
     button2.pack(pady=10)
