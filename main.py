@@ -1,10 +1,11 @@
-import random
 from sympy import mod_inverse
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import PhotoImage
 from PIL import Image
-import pickle
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import AES, PKCS1_OAEP
+import os
 
 # Static key values
 a = 3  # Your private key
@@ -27,14 +28,14 @@ def open_menu():
     def archivo():
         open_archivo()
 
-    def audio():
-        open_audio()
+    def pdf():
+        open_pdf()
 
     def imagen():
         open_imagen()
 
     button1 = tk.Button(ventana, text="Encriptar Texto", command=archivo)
-    button2 = tk.Button(ventana, text="Encriptar Audio", command=audio)
+    button2 = tk.Button(ventana, text="Encriptar PDF", command=pdf)
     button3 = tk.Button(ventana, text="Encriptar Imagen", command=imagen)
 
     button1.configure(bg="#2aa3f4")
@@ -53,6 +54,8 @@ def open_menu():
 
     ventana.mainloop()
 
+
+#--------------ENCRIPTACION Y DECRIPTACION DE TEXTO------------------
 def open_archivo():
     ventana = tk.Toplevel()
     ventana.title("Encriptación de Texto")
@@ -96,8 +99,8 @@ def open_archivo():
         return texto_plano
 
     def click_encriptar_texto():
-        archivo_entrada = filedialog.askopenfilename(title="Seleccionar Archivo de Entrada")
-        archivo_salida = filedialog.asksaveasfilename(title="Seleccionar Archivo de Salida")
+        archivo_entrada = filedialog.askopenfilename(title="Seleccionar Archivo de entrada")
+        archivo_salida = filedialog.asksaveasfilename(title="Seleccionar Archivo de salida")
 
         p, g, A, a = generar_claves()
 
@@ -109,11 +112,11 @@ def open_archivo():
         with open(archivo_salida, 'w') as file:
             file.write(f"{C1}\n{C2}")
 
-        etiqueta_resultado.config(text=f"Archivo '{archivo_entrada}' encriptado and saved in '{archivo_salida}'")
+        etiqueta_resultado.config(text=f"Archivo '{archivo_entrada}' encriptado y guardado en '{archivo_salida}'")
 
     def click_desencriptar_texto():
-        archivo_entrada = filedialog.askopenfilename(title="Select Encrypted File")
-        archivo_salida = filedialog.asksaveasfilename(title="Select Output File")
+        archivo_entrada = filedialog.askopenfilename(title="Seleccione el archivo encriptado")
+        archivo_salida = filedialog.asksaveasfilename(title="Seleccione el archivo de salida")
 
         p, g, A, a = generar_claves()
 
@@ -125,34 +128,95 @@ def open_archivo():
         with open(archivo_salida, 'w') as file:
             file.write(str(mensaje_desencriptado))
 
-        etiqueta_resultado.config(text=f"File '{archivo_entrada}' decrypted and saved in '{archivo_salida}'")
+        etiqueta_resultado.config(text=f"Archivo '{archivo_entrada}' decriptado y guardado en '{archivo_salida}'")
 
     button_encriptar.config(command=click_encriptar_texto)
     button_desencriptar.config(command=click_desencriptar_texto)
 
     ventana.mainloop()
 
-def open_audio():
+
+
+#--------------ENCRIPTACION Y DECRIPTACION DE PDF-------------------
+def open_pdf():
     ventana = tk.Toplevel()
-    ventana.title("Audio Encryption")
+    ventana.title("Encriptación de PDF")
     ventana.geometry("400x300")
 
-    # Audio encryption interface
+    def generate_or_use_fixed_key_pair():
+        # Check if key files exist, if not, generate them
+        if not os.path.exists('private.pem') or not os.path.exists('public.pem'):
+            key = RSA.generate(2048)
+            with open('private.pem', 'wb') as priv_file, open('public.pem', 'wb') as pub_file:
+                priv_file.write(key.export_key('PEM'))
+                pub_file.write(key.publickey().export_key('PEM'))
 
-    heading_label = tk.Label(ventana, text="Audio Encryption with ElGamal", font=("Arial", 16))
-    heading_label.pack(pady=10)
+        with open('private.pem', 'rb') as priv_file, open('public.pem', 'rb') as pub_file:
+            rsa_private_key = RSA.import_key(priv_file.read())
+            rsa_public_key = RSA.import_key(pub_file.read())
 
-    button_encriptar = tk.Button(ventana, text="Encrypt Audio")
-    button_encriptar.pack(pady=5)
+        return rsa_private_key, rsa_public_key
 
-    button_desencriptar = tk.Button(ventana, text="Decrypt Audio")
-    button_desencriptar.pack(pady=5)
+    def encrypt_pdf(pdf_file, rsa_public_key):
+        symmetric_key = os.urandom(16)  # Generate a 128-bit random key
+        cipher = AES.new(symmetric_key, AES.MODE_EAX)
+
+        with open(pdf_file, 'rb') as file:
+            plaintext = file.read()
+
+        ciphertext, tag = cipher.encrypt_and_digest(plaintext)
+
+        rsa_cipher = PKCS1_OAEP.new(rsa_public_key)
+        encrypted_key = rsa_cipher.encrypt(symmetric_key)
+
+        with open(pdf_file + ".enc", 'wb') as file:
+            file.write(encrypted_key)
+            file.write(cipher.nonce)
+            file.write(ciphertext)
+            file.write(tag)
+
+    def decrypt_pdf(encrypted_pdf_file, rsa_private_key):
+        with open(encrypted_pdf_file, 'rb') as file:
+            encrypted_key = file.read(256)
+            nonce = file.read(16)
+            ciphertext = file.read()
+
+        rsa_cipher = PKCS1_OAEP.new(rsa_private_key)
+        symmetric_key = rsa_cipher.decrypt(encrypted_key)
+
+        cipher = AES.new(symmetric_key, AES.MODE_EAX, nonce=nonce)
+        plaintext = cipher.decrypt(ciphertext)
+
+        decrypted_file = os.path.splitext(encrypted_pdf_file)[0] + "_decrypted.pdf"
+        with open(decrypted_file, 'wb') as file:
+            file.write(plaintext)
+
+    def upload_pdf():
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            encrypt_pdf(file_path, rsa_public_key)
+            print("PDF Encriptado con éxito!")
+
+    def decrypt_uploaded_pdf():
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            decrypt_pdf(file_path, rsa_private_key)
+            print("PDF Decriptado con éxito!")
 
     def volver_atras():
         ventana.destroy()
 
-    button_atras = tk.Button(ventana, text="Go Back", command=volver_atras)
-    button_atras.pack(pady=5)
+    # Generate or use fixed RSA key pair
+    rsa_private_key, rsa_public_key = generate_or_use_fixed_key_pair()
+
+    # Add a heading label
+    heading_label = tk.Label(ventana, text="Encriptación y Desencriptación de PDF", padx=5, pady=10)
+    heading_label.pack()
+
+    # Create buttons with padding
+    button_encriptar = tk.Button(ventana, text="Subir y Encriptar PDF", command=upload_pdf, padx=5, pady=5)
+    button_desencriptar = tk.Button(ventana, text="Subir y Desencriptar PDF", command=decrypt_uploaded_pdf, padx=5, pady=5)
+    button_atras = tk.Button(ventana, text="Volver Atrás", command=volver_atras)
 
     button_desencriptar.configure(bg="#2aa3f4")
     button_encriptar.configure(bg="#2aa3f4")
@@ -161,67 +225,18 @@ def open_audio():
     button_desencriptar.configure(fg="#FFFFFF")
     button_atras.configure(fg="#FFFFFF")
 
-    etiqueta_resultado = tk.Label(ventana, text="")
-    etiqueta_resultado.pack(pady=10)
+    button_encriptar.pack(pady=5)
+    button_desencriptar.pack(pady=5)
+    button_atras.pack(pady=5)
 
-    def encriptar_audio(audio_file, p, g, A):
-        # Read binary audio data from the file
-        with open(audio_file, 'rb') as file:
-            audio_data = file.read()
-
-        encrypted_audio_data = bytes((byte * pow(A, k, p) % p for byte in audio_data))
-
-        C1 = pow(g, k, p)
-
-        return (C1, encrypted_audio_data)
-
-    def desencriptar_audio(C1, C2, p, a, output_file):
-        C1_int = int.from_bytes(C1, byteorder='big')  # Convert C1 from bytes to an integer
-        s = pow(C1_int, a, p)
-
-        decrypted_audio_data = bytes((byte * mod_inverse(s, p) % p for byte in C2))
-
-        with open(output_file, 'wb') as file:
-            file.write(decrypted_audio_data)
-
-        etiqueta_resultado.config(text=f"Audio decrypted and saved in '{output_file}'")
-
-    def click_encriptar_audio():
-        archivo_entrada = filedialog.askopenfilename(title="Select Input Audio File")
-        archivo_salida = filedialog.asksaveasfilename(title="Select Output Audio File")
-
-        p, g, A, a = generar_claves()
-
-        C1, C2 = encriptar_audio(archivo_entrada, p, g, A)
-
-        with open(archivo_salida, 'wb') as file:
-            file.write(C1.to_bytes((C1.bit_length() + 7) // 8, byteorder='big'))  # Convert C1 to bytes
-            file.write(C2)
-
-        etiqueta_resultado.config(text=f"Audio encrypted and saved in '{archivo_salida}'")
-
-    def click_desencriptar_audio():
-        archivo_entrada = filedialog.askopenfilename(title="Select Encrypted Audio")
-        archivo_salida = filedialog.asksaveasfilename(title="Select Output Audio File")
-
-        p, g, A, a = generar_claves()
-
-        with open(archivo_entrada, 'rb') as file:
-            C1 = file.read(32)  # Assuming C1 is 32 bytes
-            C2 = file.read()
-
-        desencriptar_audio(C1, C2, p, a, archivo_salida)
-
-        etiqueta_resultado.config(text=f"Audio decrypted and saved in '{archivo_salida}'")
-
-    button_encriptar.config(command=click_encriptar_audio)
-    button_desencriptar.config(command=click_desencriptar_audio)
 
     ventana.mainloop()
 
+
+#--------------ENCRIPTACION Y DECRIPTACION DE IMAGEN-------------------
 def open_imagen():
     ventana = tk.Toplevel()
-    ventana.title("Image Encryption")
+    ventana.title("Encriptación de Imagen con ElGamal")
     ventana.geometry("400x300")
 
     # Image encryption interface
@@ -257,7 +272,7 @@ def open_imagen():
                     pixel_index += 1
 
             encrypted_image.save("encrypted_image.png")
-            info_label.config(text="Image encrypted and saved as encrypted_image.png")
+            info_label.config(text="Imagen encriptada y guardada como encrypted_image.png")
 
         except Exception as e:
             info_label.config(text="Error: " + str(e))
@@ -294,24 +309,24 @@ def open_imagen():
                     pixel_index += 1
 
             decrypted_image.save("decrypted_image.png")
-            info_label.config(text="Image decrypted and saved as decrypted_image.png")
+            info_label.config(text="Imagen decriptada y guardada como decrypted_image.png")
 
         except Exception as e:
             info_label.config(text="Error: " + str(e))
 
-    heading_label = tk.Label(ventana, text="Image Encryption with ElGamal", font=("Arial", 16))
+    heading_label = tk.Label(ventana, text="Encriptación de imagen con ElGamal", font=("Arial", 16))
     heading_label.pack(pady=10)
 
-    button_encriptar = tk.Button(ventana, text="Encrypt Image", command= encrypt_image_static)
+    button_encriptar = tk.Button(ventana, text="Encriptar imagen", command= encrypt_image_static)
     button_encriptar.pack(pady=5)
 
-    button_desencriptar = tk.Button(ventana, text="Decrypt Image", command= decrypt_image_static)
+    button_desencriptar = tk.Button(ventana, text="Decriptar imagen", command= decrypt_image_static)
     button_desencriptar.pack(pady=5)
 
     def volver_atras():
         ventana.destroy()
 
-    button_atras = tk.Button(ventana, text="Go Back", command=volver_atras)
+    button_atras = tk.Button(ventana, text="Volver Atrás", command=volver_atras)
     button_atras.pack(pady=5)
 
     button_desencriptar.configure(bg="#2aa3f4")
@@ -352,5 +367,3 @@ def generar_claves():
 
 if __name__ == "__main__":
     open_menu()
-
-
